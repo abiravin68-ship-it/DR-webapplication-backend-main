@@ -1,0 +1,19 @@
+tensorflow==2.20.0; platform_system=="Windows"
+tensorflow-cpu==2.20.0; platform_system!="Windows"
+
+keras>=3.0,<4
+numpy==1.26.4
+
+fastapi==0.115.6
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+
+python-dotenv==1.0.1
+
+pillow==11.0.0
+opencv-python-headless==4.10.0.84
+
+pycryptodome==3.21.0
+PyJWT==2.10.1
+
+gunicorn==22.0.0; platform_system!="Windows"
