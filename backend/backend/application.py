@@ -263,8 +263,16 @@ app =FastAPI ()
 
 DEV_MODE =os .getenv ("DEV_MODE","false").strip ().lower ()=="true"
 
-RAW_MAX = 10 * 1024 * 1024          
-JSON_MAX = 16 * 1024 * 1024         
+
+MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(10 * 1024 * 1024)))
+
+
+MULTIPART_BODY_MAX_BYTES = int(os.getenv("MULTIPART_BODY_MAX_BYTES", str(MAX_IMAGE_BYTES + 1 * 1024 * 1024))) 
+JSON_BODY_MAX_BYTES      = int(os.getenv("JSON_BODY_MAX_BYTES",      str(16 * 1024 * 1024)))                   
+
+
+MAX_CONTENT_LENGTH = MAX_IMAGE_BYTES
+       
 
 
 RATE_LIMIT_ENABLED =os .getenv ("RATE_LIMIT_ENABLED","false").strip ().lower ()=="true"
@@ -533,12 +541,31 @@ async def max_size_limit(request: Request, call_next):
         cl = request.headers.get("content-length")
         if cl:
             try:
-                limit = JSON_MAX if "application/json" in (request.headers.get("content-type") or "").lower() else RAW_MAX
+                ct = (request.headers.get("content-type") or "").lower()
+
+                if "application/json" in ct:
+                    limit = JSON_BODY_MAX_BYTES
+                elif "multipart/form-data" in ct:
+                    limit = MULTIPART_BODY_MAX_BYTES
+                else:
+                    limit = MAX_IMAGE_BYTES
+
                 if int(cl) > limit:
-                    return JSONResponse({"error": "File too large. Maximum allowed size is 10 MB."}, status_code=413)
+                    return JSONResponse(
+                        {
+                            "error": "File too large. Maximum allowed size is 10 MB.",
+                            "code": "PAYLOAD_TOO_LARGE",
+                            "content_length": int(cl),
+                            "limit": limit,
+                            "content_type": ct,
+                        },
+                        status_code=413,
+                    )
             except Exception:
                 pass
+
     return await call_next(request)
+
 
 
 
