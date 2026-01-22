@@ -264,11 +264,31 @@ app =FastAPI ()
 DEV_MODE =os .getenv ("DEV_MODE","false").strip ().lower ()=="true"
 
 
-MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(11* 1024 * 1024)))
-MULTIPART_BODY_MAX_BYTES = int(os.getenv("MULTIPART_BODY_MAX_BYTES", str(MAX_IMAGE_BYTES + 2 * 1024 * 1024)))
-JSON_BODY_MAX_BYTES = int(os.getenv("JSON_BODY_MAX_BYTES", str(22 * 1024 * 1024)))
+
+MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(25 * 1024 * 1024)))
+
+
+MULTIPART_OVERHEAD_BYTES = int(os.getenv("MULTIPART_OVERHEAD_BYTES", str(2 * 1024 * 1024)))
+MULTIPART_BODY_MAX_BYTES = int(
+    os.getenv(
+        "MULTIPART_BODY_MAX_BYTES",
+        str(MAX_IMAGE_BYTES + MULTIPART_OVERHEAD_BYTES),
+    )
+)
+
+
+JSON_OVERHEAD_BYTES = int(os.getenv("JSON_OVERHEAD_BYTES", str(2 * 1024 * 1024)))
+_MIN_JSON_BYTES = ((MAX_IMAGE_BYTES * 4 + 2) // 3) + JSON_OVERHEAD_BYTES
+JSON_BODY_MAX_BYTES = int(os.getenv("JSON_BODY_MAX_BYTES", str(_MIN_JSON_BYTES)))
+
+
+MULTIPART_BODY_MAX_BYTES = max(MULTIPART_BODY_MAX_BYTES, MAX_IMAGE_BYTES + MULTIPART_OVERHEAD_BYTES)
+JSON_BODY_MAX_BYTES = max(JSON_BODY_MAX_BYTES, _MIN_JSON_BYTES)
 
 MAX_CONTENT_LENGTH = MAX_IMAGE_BYTES
+
+def _bytes_to_mb(n: int) -> float:
+    return float(n) / (1024.0 * 1024.0)
 RATE_LIMIT_ENABLED =os .getenv ("RATE_LIMIT_ENABLED","false").strip ().lower ()=="true"
 PREDICT_MAX =int (os .getenv ("PREDICT_MAX_PER_MIN","60"))
 PREDICT_WINDOW =int (os .getenv ("PREDICT_WINDOW_SECONDS","60"))
@@ -547,10 +567,11 @@ async def max_size_limit(request: Request, call_next):
                 if int(cl) > limit:
                     return JSONResponse(
                         {
-                            "error": "File too large. Maximum allowed size is 11 MB.",
+                            "error": f"File too large. Maximum allowed size is {_bytes_to_mb(limit):.2f} MB.",
                             "code": "PAYLOAD_TOO_LARGE",
                             "content_length": int(cl),
                             "limit": limit,
+                            "limit_mb": round(_bytes_to_mb(limit), 2),
                             "content_type": ct,
                         },
                         status_code=413,
@@ -909,7 +930,7 @@ async def _get_image_from_request (request :Request )->Tuple [Optional [np .ndar
             if not data :
                 return None ,None ,"Empty file"
             if len (data )>MAX_CONTENT_LENGTH :
-                return None ,None ,"File too large. Maximum allowed size is 11 MB."
+                return None ,None ,f"File too large. Maximum allowed size is {_bytes_to_mb(MAX_CONTENT_LENGTH):.2f} MB."
             img =cv2 .imdecode (np .frombuffer (data ,np .uint8 ),cv2 .IMREAD_COLOR )
             if img is None :
                 return None ,None ,"Could not decode image"
@@ -935,7 +956,7 @@ async def _get_image_from_request (request :Request )->Tuple [Optional [np .ndar
             except Exception :
                 raw =None
             if raw is not None and len (raw )>MAX_CONTENT_LENGTH :
-                return None ,None ,"File too large. Maximum allowed size is 11 MB."
+                return None ,None ,f"File too large. Maximum allowed size is {_bytes_to_mb(MAX_CONTENT_LENGTH):.2f} MB."
             return img ,raw ,None
         return None ,None ,"JSON provided but no image_base64/image/base64 field found"
 
