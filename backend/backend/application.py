@@ -263,7 +263,7 @@ app =FastAPI ()
 
 DEV_MODE =os .getenv ("DEV_MODE","false").strip ().lower ()=="true"
 
-MAX_CONTENT_LENGTH =5 *1024 *1024
+MAX_CONTENT_LENGTH =10 *1024 *1024
 
 RATE_LIMIT_ENABLED =os .getenv ("RATE_LIMIT_ENABLED","false").strip ().lower ()=="true"
 PREDICT_MAX =int (os .getenv ("PREDICT_MAX_PER_MIN","60"))
