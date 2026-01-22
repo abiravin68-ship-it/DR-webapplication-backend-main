@@ -532,7 +532,7 @@ async def max_size_limit (request :Request ,call_next ):
         if cl :
             try :
                 if int (cl )>MAX_CONTENT_LENGTH :
-                    return JSONResponse ({"error":"File too large. Maximum allowed size is 5 MB."},status_code =413 )
+                    return JSONResponse ({"error":"File too large. Maximum allowed size is 10 MB."},status_code =413 )
             except Exception :
                 pass
     return await call_next (request )
@@ -884,7 +884,7 @@ async def _get_image_from_request (request :Request )->Tuple [Optional [np .ndar
             if not data :
                 return None ,None ,"Empty file"
             if len (data )>MAX_CONTENT_LENGTH :
-                return None ,None ,"File too large. Maximum allowed size is 5 MB."
+                return None ,None ,"File too large. Maximum allowed size is 10 MB."
             img =cv2 .imdecode (np .frombuffer (data ,np .uint8 ),cv2 .IMREAD_COLOR )
             if img is None :
                 return None ,None ,"Could not decode image"
@@ -910,7 +910,7 @@ async def _get_image_from_request (request :Request )->Tuple [Optional [np .ndar
             except Exception :
                 raw =None
             if raw is not None and len (raw )>MAX_CONTENT_LENGTH :
-                return None ,None ,"File too large. Maximum allowed size is 5 MB."
+                return None ,None ,"File too large. Maximum allowed size is 10 MB."
             return img ,raw ,None
         return None ,None ,"JSON provided but no image_base64/image/base64 field found"
 
