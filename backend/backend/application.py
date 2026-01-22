@@ -264,12 +264,9 @@ app =FastAPI ()
 DEV_MODE =os .getenv ("DEV_MODE","false").strip ().lower ()=="true"
 
 
-MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(10 * 1024 * 1024)))
-
-
-MULTIPART_BODY_MAX_BYTES = int(os.getenv("MULTIPART_BODY_MAX_BYTES", str(MAX_IMAGE_BYTES + 1 * 1024 * 1024))) 
-JSON_BODY_MAX_BYTES      = int(os.getenv("JSON_BODY_MAX_BYTES",      str(16 * 1024 * 1024)))                   
-
+MAX_IMAGE_BYTES = 10 * 1024 * 1024               
+MULTIPART_BODY_MAX_BYTES = 12 * 1024 * 1024      
+JSON_BODY_MAX_BYTES = 20 * 1024 * 1024  
 
 MAX_CONTENT_LENGTH = MAX_IMAGE_BYTES
        
