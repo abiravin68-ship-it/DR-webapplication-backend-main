@@ -754,7 +754,7 @@ target_layer_name :str ,
 )->str :
     
 
-    alpha =float (os .getenv ("GRADCAM_ALPHA","0.28"))
+    alpha =float (os .getenv ("GRADCAM_ALPHA","0.35"))
     mask_power =float (os .getenv ("GRADCAM_MASK_POWER","1.4"))
 
     apply_fundus_mask =os .getenv ("GRADCAM_APPLY_FUNDUS_MASK","true").strip ().lower ()in {"1","true","yes","y","on"}
