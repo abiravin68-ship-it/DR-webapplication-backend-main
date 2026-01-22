@@ -264,14 +264,11 @@ app =FastAPI ()
 DEV_MODE =os .getenv ("DEV_MODE","false").strip ().lower ()=="true"
 
 
-MAX_IMAGE_BYTES = 10 * 1024 * 1024               
-MULTIPART_BODY_MAX_BYTES = 12 * 1024 * 1024      
-JSON_BODY_MAX_BYTES = 20 * 1024 * 1024  
+MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(10 * 1024 * 1024)))
+MULTIPART_BODY_MAX_BYTES = int(os.getenv("MULTIPART_BODY_MAX_BYTES", str(MAX_IMAGE_BYTES + 2 * 1024 * 1024)))
+JSON_BODY_MAX_BYTES = int(os.getenv("JSON_BODY_MAX_BYTES", str(20 * 1024 * 1024)))
 
 MAX_CONTENT_LENGTH = MAX_IMAGE_BYTES
-       
-
-
 RATE_LIMIT_ENABLED =os .getenv ("RATE_LIMIT_ENABLED","false").strip ().lower ()=="true"
 PREDICT_MAX =int (os .getenv ("PREDICT_MAX_PER_MIN","60"))
 PREDICT_WINDOW =int (os .getenv ("PREDICT_WINDOW_SECONDS","60"))
