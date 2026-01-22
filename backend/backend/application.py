@@ -263,7 +263,9 @@ app =FastAPI ()
 
 DEV_MODE =os .getenv ("DEV_MODE","false").strip ().lower ()=="true"
 
-MAX_CONTENT_LENGTH =10 *1024 *1024
+RAW_MAX = 10 * 1024 * 1024          
+JSON_MAX = 16 * 1024 * 1024         
+
 
 RATE_LIMIT_ENABLED =os .getenv ("RATE_LIMIT_ENABLED","false").strip ().lower ()=="true"
 PREDICT_MAX =int (os .getenv ("PREDICT_MAX_PER_MIN","60"))
@@ -525,17 +527,19 @@ max_age =600 ,
 )
 
 
-@app .middleware ("http")
-async def max_size_limit (request :Request ,call_next ):
-    if request .method in ("POST","PUT","PATCH"):
-        cl =request .headers .get ("content-length")
-        if cl :
-            try :
-                if int (cl )>MAX_CONTENT_LENGTH :
-                    return JSONResponse ({"error":"File too large. Maximum allowed size is 10 MB."},status_code =413 )
-            except Exception :
+@app.middleware("http")
+async def max_size_limit(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH"):
+        cl = request.headers.get("content-length")
+        if cl:
+            try:
+                limit = JSON_MAX if "application/json" in (request.headers.get("content-type") or "").lower() else RAW_MAX
+                if int(cl) > limit:
+                    return JSONResponse({"error": "File too large. Maximum allowed size is 10 MB."}, status_code=413)
+            except Exception:
                 pass
-    return await call_next (request )
+    return await call_next(request)
+
 
 
 @app .middleware ("http")
