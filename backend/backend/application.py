@@ -644,7 +644,7 @@ def _is_true (v :str )->bool :
     return (v or "").strip ().lower ()in {"1","true","yes","y","on"}
 
 
-def preprocess_image_with_vis (img_bgr :np .ndarray )->Tuple [np .ndarray ,np .ndarray ]:
+def preprocess_image_with_vis (img_bgr :np .ndarray ,already_preprocessed :bool =False )->Tuple [np .ndarray ,np .ndarray ]:
 
 
 
@@ -655,16 +655,19 @@ def preprocess_image_with_vis (img_bgr :np .ndarray )->Tuple [np .ndarray ,np .n
     vis_rgb_u8 =np .clip (vis_rgb_u8 ,0 ,255 ).astype (np .uint8 )
 
 
-    lab =cv2 .cvtColor (img_bgr ,cv2 .COLOR_BGR2LAB )
-    l ,a ,b =cv2 .split (lab )
+    if already_preprocessed :
+        enhanced_rgb =vis_rgb_u8
+    else :
+        lab =cv2 .cvtColor (img_bgr ,cv2 .COLOR_BGR2LAB )
+        l ,a ,b =cv2 .split (lab )
 
-    clahe =cv2 .createCLAHE (clipLimit =2.0 ,tileGridSize =(8 ,8 ))
-    l2 =clahe .apply (l )
+        clahe =cv2 .createCLAHE (clipLimit =2.0 ,tileGridSize =(8 ,8 ))
+        l2 =clahe .apply (l )
 
-    lab2 =cv2 .merge ([l2 ,a ,b ])
-    enhanced_bgr =cv2 .cvtColor (lab2 ,cv2 .COLOR_LAB2BGR )
-    enhanced_rgb =cv2 .cvtColor (enhanced_bgr ,cv2 .COLOR_BGR2RGB )
-    enhanced_rgb =np .clip (enhanced_rgb ,0 ,255 ).astype (np .uint8 )
+        lab2 =cv2 .merge ([l2 ,a ,b ])
+        enhanced_bgr =cv2 .cvtColor (lab2 ,cv2 .COLOR_LAB2BGR )
+        enhanced_rgb =cv2 .cvtColor (enhanced_bgr ,cv2 .COLOR_BGR2RGB )
+        enhanced_rgb =np .clip (enhanced_rgb ,0 ,255 ).astype (np .uint8 )
 
     x =enhanced_rgb .astype ("float32")[None ,...]
     return x ,vis_rgb_u8
@@ -736,7 +739,7 @@ def _list_4d_layers (m :tf .keras .Model ,limit :int =25 ):
 
 def _pick_gradcam_target_layer (m :tf .keras .Model )->str :
 
-    env_name =os .getenv ("GRADCAM_LAYER_NAME","").strip ()
+    env_name =os .getenv ("GRADCAM_LAYER_NAME","").strip ()or "conv2d_3"
     if env_name :
         try :
             _ =m .get_layer (env_name )
@@ -987,6 +990,7 @@ async def predict (request :Request ):
     client_ip =get_client_ip (request )
     t0 =time .time ()
     want_gradcam =_is_true (request .query_params .get ("gradcam",""))
+    already_preprocessed =_is_true (request .query_params .get ("preprocessed",""))
 
 
     if model is None or infer is None :
@@ -1014,7 +1018,7 @@ async def predict (request :Request ):
             audit_logger .log_access (anonymized_id ,"PREDICT",request .url .path ,client_ip ,False ,{"error":err })
             return JSONResponse ({"success":False ,"error":err },status_code =400 )
 
-        processed_image ,vis_rgb_u8 =preprocess_image_with_vis (img_bgr )
+        processed_image ,vis_rgb_u8 =preprocess_image_with_vis (img_bgr ,already_preprocessed =already_preprocessed )
         x =tf .convert_to_tensor (processed_image ,dtype =tf .float32 )
 
         acquired =PREDICT_LOCK .acquire (timeout =PREDICT_ACQUIRE_TIMEOUT )
