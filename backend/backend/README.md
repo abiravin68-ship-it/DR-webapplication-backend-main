@@ -36,7 +36,8 @@ pip install -r requirements.txt
 
 ### Start Command
 ```bash
-uvicorn application:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+sh -c "gunicorn -k uvicorn.workers.UvicornWorker -w 1 -t 600 -b 0.0.0.0:${PORT} application:app"
+
 ```
 
 ### Recommended Render env vars
