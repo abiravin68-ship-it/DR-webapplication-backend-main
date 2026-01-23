@@ -306,6 +306,28 @@ EXEMPT_PATHS ={
 MODEL_FILE =os .getenv ("MODEL_FILE","").strip ()or "best_ra_finetune_export.keras"
 IMAGE_SIZE :Tuple [int ,int ]=(300 ,300 )
 
+
+CLAHE_CLIP_LIMIT = float(os.getenv("CLAHE_CLIP_LIMIT", "2.0"))
+
+def _parse_tile_grid(s: str) -> Tuple[int, int]:
+    try:
+        a, b = (x.strip() for x in (s or "8,8").split(",", 1))
+        return (max(1, int(a)), max(1, int(b)))
+    except Exception:
+        return (8, 8)
+
+CLAHE_TILE_GRID = _parse_tile_grid(os.getenv("CLAHE_TILE_GRID", "8,8"))
+
+PREPROCESS_DEBUG_DEFAULT = os.getenv("PREPROCESS_DEBUG", "false").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+def _encode_png_data_url_from_rgb(rgb_u8: np.ndarray) -> str:
+    bgr = cv2.cvtColor(rgb_u8, cv2.COLOR_RGB2BGR)
+    ok, buf = cv2.imencode(".png", bgr)
+    if not ok:
+        raise RuntimeError("Failed to encode PNG")
+    b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
 STORE_UPLOADS =os .getenv ("STORE_UPLOADS","false").strip ().lower ()=="true"
 SECURE_UPLOAD_DIR =os .path .join (BASE_DIR ,"secure_uploads")
 
@@ -622,55 +644,44 @@ async def rate_limit_and_security_headers (request :Request ,call_next ):
     return response
 
 
-def preprocess_image (img_bgr :np .ndarray )->np .ndarray :
-    img_bgr =cv2 .resize (img_bgr ,IMAGE_SIZE ,interpolation =cv2 .INTER_AREA )
 
-    lab =cv2 .cvtColor (img_bgr ,cv2 .COLOR_BGR2LAB )
-    l ,a ,b =cv2 .split (lab )
+def _clahe_enhance_bgr(img_bgr_rs: np.ndarray) -> np.ndarray:
+    lab = cv2.cvtColor(img_bgr_rs, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=CLAHE_CLIP_LIMIT, tileGridSize=CLAHE_TILE_GRID)
+    l2 = clahe.apply(l)
+    lab2 = cv2.merge([l2, a, b])
+    return cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
 
-    clahe =cv2 .createCLAHE (clipLimit =2.0 ,tileGridSize =(8 ,8 ))
-    l2 =clahe .apply (l )
 
-    lab2 =cv2 .merge ([l2 ,a ,b ])
-    enhanced_bgr =cv2 .cvtColor (lab2 ,cv2 .COLOR_LAB2BGR )
-    enhanced_rgb =cv2 .cvtColor (enhanced_bgr ,cv2 .COLOR_BGR2RGB )
-
-    x =enhanced_rgb .astype ("float32")
-    x =np .expand_dims (x ,axis =0 )
+def preprocess_image(img_bgr: np.ndarray) -> np.ndarray:
+    x, _, _ = preprocess_image_with_vis(img_bgr, already_preprocessed=False)
     return x
 
 
-def _is_true (v :str )->bool :
-    return (v or "").strip ().lower ()in {"1","true","yes","y","on"}
+def _is_true(v: str) -> bool:
+    return (v or "").strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def preprocess_image_with_vis (img_bgr :np .ndarray ,already_preprocessed :bool =False )->Tuple [np .ndarray ,np .ndarray ]:
+def preprocess_image_with_vis(
+    img_bgr: np.ndarray,
+    already_preprocessed: bool = False,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    img_bgr_rs = cv2.resize(img_bgr, IMAGE_SIZE, interpolation=cv2.INTER_AREA)
 
+    vis_rgb_u8 = cv2.cvtColor(img_bgr_rs, cv2.COLOR_BGR2RGB)
+    vis_rgb_u8 = np.clip(vis_rgb_u8, 0, 255).astype(np.uint8)
 
+    if already_preprocessed:
+        enhanced_bgr = img_bgr_rs
+    else:
+        enhanced_bgr = _clahe_enhance_bgr(img_bgr_rs)
 
-    img_bgr =cv2 .resize (img_bgr ,IMAGE_SIZE ,interpolation =cv2 .INTER_AREA )
+    enhanced_rgb_u8 = cv2.cvtColor(enhanced_bgr, cv2.COLOR_BGR2RGB)
+    enhanced_rgb_u8 = np.clip(enhanced_rgb_u8, 0, 255).astype(np.uint8)
 
-
-    vis_rgb_u8 =cv2 .cvtColor (img_bgr ,cv2 .COLOR_BGR2RGB )
-    vis_rgb_u8 =np .clip (vis_rgb_u8 ,0 ,255 ).astype (np .uint8 )
-
-
-    if already_preprocessed :
-        enhanced_rgb =vis_rgb_u8
-    else :
-        lab =cv2 .cvtColor (img_bgr ,cv2 .COLOR_BGR2LAB )
-        l ,a ,b =cv2 .split (lab )
-
-        clahe =cv2 .createCLAHE (clipLimit =2.0 ,tileGridSize =(8 ,8 ))
-        l2 =clahe .apply (l )
-
-        lab2 =cv2 .merge ([l2 ,a ,b ])
-        enhanced_bgr =cv2 .cvtColor (lab2 ,cv2 .COLOR_LAB2BGR )
-        enhanced_rgb =cv2 .cvtColor (enhanced_bgr ,cv2 .COLOR_BGR2RGB )
-        enhanced_rgb =np .clip (enhanced_rgb ,0 ,255 ).astype (np .uint8 )
-
-    x =enhanced_rgb .astype ("float32")[None ,...]
-    return x ,vis_rgb_u8
+    x = enhanced_rgb_u8.astype("float32")[None, ...]
+    return x, vis_rgb_u8, enhanced_rgb_u8
 
 
 def _gradcam_fundus_mask (img_rgb_u8 :np .ndarray ,erode_ratio :float =0.05 )->np .ndarray :
@@ -1018,8 +1029,20 @@ async def predict (request :Request ):
             audit_logger .log_access (anonymized_id ,"PREDICT",request .url .path ,client_ip ,False ,{"error":err })
             return JSONResponse ({"success":False ,"error":err },status_code =400 )
 
-        processed_image ,vis_rgb_u8 =preprocess_image_with_vis (img_bgr ,already_preprocessed =already_preprocessed )
+        processed_image ,vis_rgb_u8 ,enhanced_rgb_u8 =preprocess_image_with_vis (img_bgr ,already_preprocessed =already_preprocessed )
         x =tf .convert_to_tensor (processed_image ,dtype =tf .float32 )
+
+        want_preprocess_debug =((DEV_MODE or PREPROCESS_DEBUG_DEFAULT )and _is_true (request .query_params .get ("debug_preprocess","")))
+        preprocess_debug =None
+        if want_preprocess_debug :
+            preprocess_debug ={
+                "already_preprocessed":bool (already_preprocessed ),
+                "clahe_applied":bool (not already_preprocessed ),
+                "image_size":[int (IMAGE_SIZE [0 ]),int (IMAGE_SIZE [1 ])],
+                "clahe_clip_limit":float (CLAHE_CLIP_LIMIT ),
+                "clahe_tile_grid":[int (CLAHE_TILE_GRID [0 ]),int (CLAHE_TILE_GRID [1 ])],
+                "enhanced_preview":_encode_png_data_url_from_rgb (enhanced_rgb_u8 ),
+            }
 
         acquired =PREDICT_LOCK .acquire (timeout =PREDICT_ACQUIRE_TIMEOUT )
         if not acquired :
@@ -1099,6 +1122,7 @@ async def predict (request :Request ):
         "gradcam_image":gradcam_image ,
         "gradcam_error":gradcam_error if DEV_MODE else None ,
         "elapsed_ms":elapsed_ms ,
+        "preprocess_debug":preprocess_debug ,
         "security":{
         "anonymized":True ,
         "encrypted":bool (STORE_UPLOADS ),
